@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X-AI · 本地视频创作台</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="src/style.css">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; img-src 'self' blob: data: https:; media-src 'self' blob: data: https:; connect-src 'self' https: http://127.0.0.1:4174; style-src 'self' 'unsafe-inline'; font-src 'self'">
+</head>
+<body>
+<div id="lockscreen" class="lockscreen" hidden>
+  <div class="lock-card">
+    <img src="assets/logo.svg" alt="X-AI" width="48" height="48">
+    <h2>另一个页面正在使用</h2>
+    <p>同一网站的工作台只能打开一个页面。请关闭其他 X-AI 页面后，再点击重新连接。</p>
+    <button type="button" id="btn-lock-retry" class="btn primary">重新连接</button>
+  </div>
+</div>
+
+<div id="app-root" class="shell" aria-hidden="true">
+  <!-- ============ 侧栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="X-AI" width="40" height="40">
+      <div class="brand-text">
+        <div class="brand-name">X-AI</div>
+        <div class="brand-sub">VIDEO STUDIO</div>
+      </div>
+    </div>
+
+    <nav class="nav" aria-label="主导航">
+      <button type="button" class="nav-item active" data-page="studio" title="创作工作台">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h9v14H4zM15 9l5-3v12l-5-3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        <span>创作工作台</span>
+      </button>
+      <button type="button" class="nav-item" data-page="tasks" title="任务与成片">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11v16H5z M8 8h5 M8 12h5 M8 16h3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span>任务与成片</span>
+      </button>
+      <button type="button" class="nav-item" data-page="assets" title="本地素材库">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+        <span>本地素材库</span>
+      </button>
+      <button type="button" class="nav-item" data-page="guide" title="操作指南">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-1.8-1.4-4.6-1.6-7-1v13c2.4-.6 5.2-.4 7 1 1.8-1.4 4.6-1.6 7-1V5c-2.4-.6-5.2-.4-7 1zm0 0v13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        <span>操作指南</span>
+      </button>
+    </nav>
+
+    <div class="side-note">
+      <div class="side-note-line1">你的文件，</div>
+      <div class="side-note-line2">你的电脑</div>
+      <p class="side-note-text">编排、生成、校验与拼接都在本机浏览器与本地目录中完成。</p>
+    </div>
+
+    <div class="side-foot">
+      <div class="version-line">X-AI 1.0　<span class="reg">®</span> YiQiXP</div>
+      <div class="art-line">让X-AI把你的故事美梦成真！</div>
+    </div>
+  </aside>
+
+  <!-- ============ 主区 ============ -->
+  <div class="main">
+    <header class="topbar">
+      <h1 id="page-title">创作工作台</h1>
+      <div class="topbar-actions">
+        <button type="button" id="btn-key-status" class="key-pill" title="连接与密钥">
+          <span class="key-dot" id="key-dot"></span>
+          <span id="key-status-text">检查密钥…</span>
+        </button>
+        <button type="button" id="btn-help" class="btn light small">帮助</button>
+      </div>
+    </header>
+
+    <div id="init-banner" class="init-banner" hidden></div>
+
+    <!-- ---------- 创作工作台 ---------- -->
+    <section id="page-studio" class="page active">
+      <div class="card dir-card">
+        <div class="dir-head">
+          <div>
+            <h2>本地文件夹</h2>
+            <div id="dir-name" class="dir-name">未选择输出目录</div>
+            <div id="dir-status" class="dir-status muted">生成产物、素材副本与项目记录将写入这个目录。</div>
+          </div>
+          <div class="dir-actions">
+            <button type="button" id="btn-choose-dir" class="btn primary">选择输出目录</button>
+            <button type="button" id="btn-save-project" class="btn light" hidden>保存项目到磁盘</button>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat"><b id="stat-jobs">0</b><span>任务总数</span></div>
+          <div class="stat"><b id="stat-ready">0</b><span>已生成</span></div>
+          <div class="stat"><b id="stat-assets">0</b><span>素材数</span></div>
+          <div class="stat"><b id="stat-episodes">0</b><span>成片数</span></div>
+        </div>
+      </div>
+
+      <div class="mode-switch card" role="tablist" aria-label="创作模式">
+        <label class="mode-opt mode-single">
+          <input type="radio" name="gen-mode" value="single" checked>
+          <span class="mode-title">单段生成</span>
+          <span class="mode-desc">一个分镜，逐步填写并检查入队</span>
+        </label>
+        <label class="mode-opt mode-batch">
+          <input type="radio" name="gen-mode" value="batch">
+          <span class="mode-title">多段一次生成</span>
+          <span class="mode-desc">导入清单，批量展开并整批入队</span>
+        </label>
+      </div>
+
+      <!-- ===== 单段操作区 ===== -->
+      <fieldset id="single-editor" class="card editor editor-single">
+        <legend>单段生成</legend>
+        <div class="form-grid">
+          <div class="field">
+            <label for="s-id">镜号</label>
+            <input id="s-id" type="text" value="S01" maxlength="64" autocomplete="off">
+            <div class="hint">安全编号：字母或数字开头，可用字母数字下划线短横线。</div>
+          </div>
+          <div class="field">
+            <label for="s-episode">分集 / 分组</label>
+            <input id="s-episode" type="text" value="EP01" maxlength="64" autocomplete="off">
+            <div class="hint">作为文件目录与拼接分组。</div>
+          </div>
+          <div class="field wide">
+            <label for="s-prompt">画面与动作 <span id="s-prompt-count" class="count">0 / 12000</span></label>
+            <textarea id="s-prompt" rows="5" required placeholder="一镜一个主要动作：描述画面、镜头与动作。"></textarea>
+          </div>
+          <div class="field">
+            <label for="s-model">视频生成平台与模型</label>
+            <select id="video-model">
+              <option value="agnes-video-2.5-flash" selected>AgnesAI · Agnes Video 2.5 Flash · 720P · 最长 12 秒</option>
+            </select>
+            <div id="model-spec" class="hint model-spec">720P · 最长 12 秒</div>
+          </div>
+          <div class="field">
+            <label for="s-mode">生成方式</label>
+            <select id="s-mode">
+              <option value="text" selected>文字生成</option>
+              <option value="reference">参考生成</option>
+              <option value="keyframe">首尾帧生成</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="s-seconds">片段时长（秒）</label>
+            <input id="s-seconds" type="number" min="4" max="12" step="1" value="8">
+            <div class="hint">4–12 秒整数。</div>
+          </div>
+          <div class="field">
+            <label for="s-aspect">画面比例</label>
+            <select id="s-aspect">
+              <option value="9:16" selected>9:16 竖屏</option>
+              <option value="16:9">16:9 横屏</option>
+              <option value="1:1">1:1 方形</option>
+              <option value="4:3">4:3</option>
+              <option value="3:4">3:4</option>
+              <option value="21:9">21:9</option>
+            </select>
+          </div>
+          <div class="field wide">
+            <label>参考素材 <span class="hint-inline">图 ≤5 张，声 ≤3 段（总长 2–12 秒）</span></label>
+            <div class="ref-toolbar">
+              <button type="button" id="btn-pick-assets" class="btn light small">从素材库选择</button>
+              <button type="button" id="btn-add-files" class="btn light small">添加本地文件</button>
+              <input type="file" id="s-files" multiple accept="image/png,image/jpeg,image/webp,audio/*" hidden>
+            </div>
+            <ul id="s-ref-list" class="ref-list"></ul>
+          </div>
+          <div class="field keyframe-only" hidden>
+            <label for="s-first">首帧</label>
+            <div class="frame-row">
+              <select id="s-first"><option value="">未选择</option></select>
+              <span class="frame-or">／</span>
+              <select id="s-last"><option value="">未选择</option></select>
+            </div>
+            <div class="hint">首尾帧生成：至少选择一帧，不能带参考声音。</div>
+          </div>
+          <div class="field wide">
+            <label for="s-dialogue">指定对白（可空）</label>
+            <textarea id="s-dialogue" rows="2" placeholder="只在需要角色开口时填写。生成时将作为明确对白约束。"></textarea>
+          </div>
+          <div class="field">
+            <label for="s-seed">随机种子（可空）</label>
+            <input id="s-seed" type="number" min="0" max="2147483647" step="1" placeholder="留空表示不指定">
+          </div>
+          <div class="field">
+            <label for="s-continuity">衔接镜号（可空）</label>
+            <input id="s-continuity" type="text" placeholder="如 S01；需参考生成且前镜已通过">
+            <div class="hint">参考模式下可沿用上一镜结束画面。</div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="btn-sample" class="btn light">填入示例</button>
+          <button type="button" id="btn-constraints" class="btn light">补充画幅与对白约束</button>
+          <button type="button" id="btn-enqueue-single" class="btn primary">检查并加入队列</button>
+        </div>
+        <div id="single-feedback" class="feedback" hidden></div>
+      </fieldset>
+
+      <!-- ===== 批量操作区 ===== -->
+      <fieldset id="batch-editor" class="card editor editor-batch" hidden disabled>
+        <legend>多段一次生成</legend>
+        <div class="batch-toolbar">
+          <button type="button" id="btn-batch-sample" class="btn light small">示例清单</button>
+          <button type="button" id="btn-batch-import" class="btn light small">导入清单文件</button>
+          <input type="file" id="batch-file" accept=".csv,.tsv,.txt,.json,.md" hidden>
+          <button type="button" id="btn-batch-dir" class="btn light small">选择清单与素材目录</button>
+          <button type="button" id="btn-batch-expand" class="btn light small">读取引用并展开</button>
+          <button type="button" id="btn-batch-export" class="btn light small" disabled>下载展开清单</button>
+        </div>
+        <div class="dir-picker-row" id="batch-dir-row" hidden>
+          <label for="batch-list-select">清单位置</label>
+          <select id="batch-list-select"></select>
+        </div>
+        <div class="field">
+          <label for="batch-text">清单内容（CSV / TSV / JSON / 纯文本）</label>
+          <textarea id="batch-text" rows="8" placeholder="粘贴清单，或点击上方按钮导入文件 / 选择目录。CSV 每行一镜。"></textarea>
+        </div>
+        <details class="batch-defaults">
+          <summary>批量默认设置 <span id="batch-defaults-summary" class="muted"></span></summary>
+          <div class="form-grid">
+            <div class="field">
+              <label for="b-seconds">默认时长（秒）</label>
+              <input id="b-seconds" type="number" min="4" max="12" step="1" value="8">
+            </div>
+            <div class="field">
+              <label for="b-aspect">默认画幅</label>
+              <select id="b-aspect">
+                <option value="9:16" selected>9:16</option>
+                <option value="16:9">16:9</option>
+                <option value="1:1">1:1</option>
+                <option value="4:3">4:3</option>
+                <option value="3:4">3:4</option>
+                <option value="21:9">21:9</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="b-episode">默认分组</label>
+              <input id="b-episode" type="text" value="EP01">
+            </div>
+            <div class="field">
+              <label for="b-prefix">镜号前缀</label>
+              <input id="b-prefix" type="text" value="S" maxlength="20">
+            </div>
+            <div class="field wide">
+              <label>批量共用素材 <span class="hint-inline">仅清单未写任何参考列时使用</span></label>
+              <button type="button" id="btn-batch-assets" class="btn light small">从素材库选择</button>
+              <ul id="b-ref-list" class="ref-list"></ul>
+            </div>
+          </div>
+        </details>
+        <div class="form-actions">
+          <button type="button" id="btn-batch-preview" class="btn light">预览字段与匹配</button>
+          <button type="button" id="btn-enqueue-batch" class="btn primary batch-primary">检查整批并加入队列</button>
+        </div>
+        <div id="batch-feedback" class="feedback" hidden></div>
+        <div id="batch-preview" hidden>
+          <h3>展开与预览</h3>
+          <div id="batch-expand-info" class="muted"></div>
+          <div id="batch-replacements"></div>
+          <div class="table-wrap"><table id="batch-table"></table></div>
+          <div id="batch-unknown-cols" class="muted"></div>
+        </div>
+      </fieldset>
+    </section>
+
+    <!-- ---------- 任务与成片 ---------- -->
+    <section id="page-tasks" class="page">
+      <div class="card queue-controls">
+        <button type="button" id="btn-run-queue" class="btn primary">开始 / 继续队列</button>
+        <button type="button" id="btn-pause-new" class="btn light">暂停新提交</button>
+        <button type="button" id="btn-export-md" class="btn light">导出制作过程 MD</button>
+        <span id="queue-state" class="muted"></span>
+      </div>
+      <div id="job-list" class="job-list"></div>
+      <button type="button" id="btn-more-jobs" class="btn light wide-btn" hidden>显示更多</button>
+
+      <div class="card" id="episode-panel">
+        <h2>按集拼接</h2>
+        <div id="episode-list" class="episode-list"></div>
+      </div>
+    </section>
+
+    <!-- ---------- 本地素材库 ---------- -->
+    <section id="page-assets" class="page">
+      <div class="card asset-toolbar">
+        <button type="button" id="btn-asset-add" class="btn primary">添加素材</button>
+        <input type="file" id="asset-files" multiple accept="image/png,image/jpeg,image/webp,audio/*" hidden>
+        <button type="button" id="btn-asset-all" class="btn light small">全选</button>
+        <button type="button" id="btn-asset-opt-candidates" class="btn light small">选待优化</button>
+        <button type="button" id="btn-asset-clear" class="btn light small">清空选择</button>
+        <button type="button" id="btn-asset-optimize" class="btn light">批量优化图片</button>
+        <button type="button" id="btn-asset-zip" class="btn light">批量下载 ZIP</button>
+        <span id="asset-count" class="muted"></span>
+      </div>
+      <div id="asset-grid" class="asset-grid"></div>
+      <div id="asset-empty" class="empty muted">还没有素材。点击“添加素材”导入图片与声音，或在创作表单直接添加文件。</div>
+    </section>
+
+    <!-- ---------- 操作指南 ---------- -->
+    <section id="page-guide" class="page">
+      <div class="card guide">
+        <h2>快速开始</h2>
+        <ol>
+          <li>点击“选择输出目录”授权一个本地文件夹；已有项目会先恢复并核对，已有 <code>references</code> 会自动备份。</li>
+          <li>在左下角“连接与密钥”确认密钥已启用：发布版直接粘贴自己的 <code>sk-</code> KEY；也可做连接测试（只请求模型列表，遵守 90 秒认证间隔）。</li>
+          <li>单段生成：填写镜号、分组、画面动作、时长（4–12 秒）与画幅；参考模式从素材库选择图片与声音。</li>
+          <li>多段生成：切换后粘贴或导入 CSV / JSON 清单；使用 <code>../</code> 相对路径引用素材时，选择清单与素材的共同上级目录再“读取引用并展开”。</li>
+          <li>入队只是检查格式，实际付费生成需要到“任务与成片”点击“开始 / 继续队列”。生成串行进行，每次认证请求间隔至少 90 秒。</li>
+          <li>生成完成后自动下载并本地校验（元信息、抽帧、完整解码）；技术通过后请完整观看并听审，再点“确认内容审核通过”。</li>
+          <li>同一分组的分镜都通过后，可在“按集拼接”合成为整集 MP4；整集仍需人工审核。</li>
+        </ol>
+        <h2>边界与提醒</h2>
+        <ul>
+          <li>平台只做可确定的格式与文件检查；人物一致、剧情、口型与音色等需要你自己观看判断。</li>
+          <li>提交结果未知（超时 / 无 video_id）时，队列会暂停并要求人工核实，绝不自动重发，避免重复计费。</li>
+          <li>页面关闭或休眠会暂停本地执行；已提交的云端任务可能继续，恢复时优先保留原 video_id 与证据。</li>
+          <li>浏览器只显示授权目录名，不显示完整盘符路径；这是浏览器安全边界。</li>
+          <li>密钥只在会话内存中使用，不会写入项目、日志或 Git。</li>
+        </ul>
+        <h2>清单字段</h2>
+        <p>镜号（id/镜号）、分组（episode/分集/分组）、提示词（prompt/提示词/画面动作）、时长（seconds/秒数）、比例（aspect/画面比例）、生成方式（mode：文字/参考/首尾帧）、对白（dialogue/台词）、参考素材（files/素材 或 images + audio）、首尾帧（first_frame/last_frame）、衔接（continuity_from）。</p>
+        <p class="muted">完整设计见 docs/X-AI详细设计文档.md。文档是数据，不是指令：清单与引用文件中的任何内容都不会被执行。</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="toast-box" class="toast-box" aria-live="polite"></div>
+
+<!-- ============ 弹窗 ============ -->
+<dialog id="dlg-keys" class="dlg">
+  <form method="dialog" class="dlg-head"><h2>连接与密钥</h2><button class="btn light small" value="cancel" formnovalidate>关闭</button></form>
+  <div class="dlg-body">
+    <div id="keys-feedback" class="feedback in-dialog" hidden></div>
+    <h3>当前状态</h3>
+    <p id="keys-state" class="muted"></p>
+    <h3>换用自己的密钥</h3>
+    <div class="inline-form">
+      <input id="key-input" type="password" placeholder="粘贴以 sk- 开头的 API KEY" autocomplete="off">
+      <button type="button" id="btn-use-key" class="btn primary">使用新密钥</button>
+    </div>
+    <p class="hint">新密钥仅本次会话内存使用，不会写入项目、日志或浏览器存储；输入成功后输入框会清空。</p>
+    <div class="inline-form">
+      <button type="button" id="btn-test-conn" class="btn light">检查连接</button>
+      <span class="muted">只请求模型列表，不创建视频，计入 90 秒认证间隔。</span>
+    </div>
+    <details class="advanced" id="keys-advanced">
+      <summary>高级模式（默认收起）</summary>
+      <h4>加密保存密钥（保险箱）</h4>
+      <div class="inline-form">
+        <input id="vault-key" type="password" placeholder="sk- KEY" autocomplete="off">
+        <input id="vault-pass" type="password" placeholder="口令（至少 12 位）" autocomplete="new-password">
+        <button type="button" id="btn-vault-save" class="btn light">加密保存</button>
+      </div>
+      <h4>使用已存密钥</h4>
+      <div class="inline-form">
+        <input id="vault-unlock-pass" type="password" placeholder="保存时的口令" autocomplete="off">
+        <button type="button" id="btn-vault-unlock" class="btn light">解锁并使用</button>
+      </div>
+      <p class="hint">保险箱使用 PBKDF2（310000 次）+ AES-256-GCM 加密保存在本浏览器；口令不保存、不发送给任何服务。忘记口令只能重新输入 KEY。</p>
+      <h4>连接设置</h4>
+      <div class="inline-form">
+        <label class="mini-label" for="conn-origin">API 地址</label>
+        <select id="conn-origin">
+          <option value="https://api.agnes-ai.cn" selected>https://api.agnes-ai.cn</option>
+          <option value="https://apihub.agnes-ai.com">https://apihub.agnes-ai.com</option>
+        </select>
+        <label class="mini-label" for="conn-gap">认证间隔（秒）</label>
+        <input id="conn-gap" type="number" min="90" max="3600" value="90">
+      </div>
+    </details>
+  </div>
+</dialog>
+
+<dialog id="dlg-pick" class="dlg dlg-wide">
+  <div class="dlg-head"><h2 id="pick-title">选择素材</h2><button type="button" class="btn light small" id="pick-close">关闭</button></div>
+  <div class="dlg-body">
+    <p class="hint" id="pick-hint"></p>
+    <div class="dlg-actions">
+      <button type="button" id="pick-all" class="btn light small">全选</button>
+      <button type="button" id="pick-clear" class="btn light small">清空选择</button>
+      <button type="button" id="pick-confirm" class="btn primary">确定</button>
+    </div>
+    <div id="pick-grid" class="asset-grid in-dialog"></div>
+    <div id="pick-empty" class="empty muted" hidden>素材库为空。请先到“本地素材库”添加素材。</div>
+  </div>
+</dialog>
+
+<dialog id="dlg-progress" class="dlg">
+  <div class="dlg-head"><h2 id="prog-title">处理进度</h2></div>
+  <div class="dlg-body">
+    <div id="prog-plan" class="muted"></div>
+    <div class="progress-row"><progress id="prog-bar" max="100" value="0"></progress><span id="prog-count"></span></div>
+    <div id="prog-current" class="muted"></div>
+    <div class="dlg-actions">
+      <button type="button" id="prog-stop" class="btn light">停止（完成当前项）</button>
+      <button type="button" id="prog-continue" class="btn light" hidden>继续剩余项</button>
+      <button type="button" id="prog-retry" class="btn light" hidden>重试失败项</button>
+      <button type="button" id="prog-export" class="btn light" hidden>下载处理记录</button>
+      <button type="button" id="prog-close" class="btn primary" hidden>完成</button>
+    </div>
+    <div id="prog-results" class="prog-results"></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-detail" class="dlg dlg-wide">
+  <div class="dlg-head"><h2 id="detail-title">任务详情</h2><button type="button" class="btn light small" id="detail-close">关闭</button></div>
+  <div class="dlg-body" id="detail-body"></div>
+</dialog>
+
+<dialog id="dlg-image" class="dlg dlg-image">
+  <div class="dlg-head"><h2 id="img-title">全图</h2><button type="button" class="btn light small" id="img-close">关闭</button></div>
+  <div class="dlg-body">
+    <div class="dlg-actions">
+      <button type="button" id="img-fit" class="btn light small active">适应窗口</button>
+      <button type="button" id="img-orig" class="btn light small">原始尺寸</button>
+      <button type="button" id="img-zoom-in" class="btn light small">＋</button>
+      <button type="button" id="img-zoom-out" class="btn light small">－</button>
+      <span id="img-info" class="muted"></span>
+    </div>
+    <div class="img-viewport" id="img-viewport"><img id="img-view" alt=""></div>
+  </div>
+</dialog>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>X-AI · 清理浏览器数据</title></head>
+<body>
+<p>正在清理本站浏览器本地数据…</p>
+<script>
+  // 仅清理本站浏览器端数据库（工作副本 / 素材 / 句柄记录），不接触任何磁盘目录。
+  const req = indexedDB.deleteDatabase('x-ai-studio');
+  req.onsuccess = () => { document.body.innerHTML = '<p>已清理。返回 <a href="/">工作台</a>（将按新项目启动）。</p>'; };
+  req.onerror = () => { document.body.innerHTML = '<p>清理失败，请关闭其他 X-AI 页面后重试。</p>'; };
+  req.onblocked = () => { document.body.innerHTML = '<p>其他页面正在使用数据，请关闭后刷新本页重试。</p>'; };
+</script>
+</body>
+</html>
