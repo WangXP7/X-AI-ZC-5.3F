@@ -164,6 +164,7 @@ step('ui-bound');
     batchPanel: state.batchPanel,
   };
   $('app-root').removeAttribute('aria-hidden');
+  $('app-root').removeAttribute('hidden');
 step('rendered');
   document.documentElement.dataset.ready = 'true';
 }

@@ -205,6 +205,11 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps({"error": "unauthorized"}).encode("utf-8")
             return self._send(401, body, "application/json; charset=utf-8", cache="no-store")
 
+        if path == "/auth-state":
+            # 告知前端：服务端密码门已生效，客户端密码门不必再次询问
+            body = json.dumps({"serverGate": True}).encode("utf-8")
+            return self._send(200, body, "application/json; charset=utf-8", cache="no-store")
+
         if path == "/healthz-big":
             # 1MB 持续传输测试（需登录）：隧道守护用它验证大文件不被截断
             body = b"\0" * (1024 * 1024)
