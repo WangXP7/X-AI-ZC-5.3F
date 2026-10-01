@@ -62,8 +62,48 @@ async function logEvent(kind, message, jobId = null) {
 }
 
 // ================= 初始化 =================
+function showInitError(e) {
+  console.error(e);
+  const b = document.getElementById('init-banner');
+  b.hidden = false;
+  b.textContent = `初始化失败：${e.message || e}`;
+}
+
 export async function init() {
-  window.__xaiSteps = window.__xaiSteps || [];
+  try {
+    if (document.readyState === 'loading') {
+      await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
+    }
+    await startWithLock();
+  } catch (e) { showInitError(e); }
+}
+
+// 同源单实例锁：立即尝试；被占用则显示等待屏并排队，其他页面关闭后自动进入。
+function startWithLock() {
+  return new Promise((resolve) => {
+    if (!navigator.locks) { resolve(); return; }
+    let acquired = false;
+    const holdAndStart = (lock) => {
+      acquired = true;
+      $('lockscreen').hidden = true;
+      resolve();
+      initCore().catch(showInitError);
+      return new Promise(() => {}); // 持锁直到页面关闭
+    };
+    navigator.locks.request('x-ai-studio-tab', { ifAvailable: true }, lock => {
+      if (lock) holdAndStart(lock);
+    });
+    setTimeout(() => {
+      if (acquired) return;
+      $('lockscreen').hidden = false;
+      $('lock-waiting').hidden = false;
+      $('app-root').setAttribute('aria-hidden', 'true');
+      navigator.locks.request('x-ai-studio-tab', lock => holdAndStart(lock));
+    }, 150);
+  });
+}
+async function initCore() {
+  window.__xaiSteps = window.__xaiSteps || [];
   const step = (s) => { window.__xaiSteps.push(s); };
 step('start');
   // 1. 能力检查
@@ -78,23 +118,6 @@ step('start');
   }
 
 step('caps-done');
-  // 2. 同源单实例锁：回调保持 pending 以持有锁；用标志位判断是否获得
-  if (navigator.locks) {
-    let got = false;
-    navigator.locks.request('x-ai-studio-tab', { ifAvailable: true }, lock => {
-      if (!lock) return;
-      got = true;
-      return new Promise(() => {}); // 持锁直到页面关闭
-    });
-    await new Promise(r => setTimeout(r, 120)); // 等待锁授予回调执行
-    if (!got) {
-      $('lockscreen').hidden = false;
-      $('app-root').setAttribute('aria-hidden', 'true');
-      return;
-    }
-  }
-  $('btn-lock-retry').addEventListener('click', () => location.reload());
-
 step('lock-done');
   // 3. 项目工作副本
   let saved = null;
