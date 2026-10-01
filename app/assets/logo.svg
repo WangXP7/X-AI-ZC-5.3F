@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="xaiBand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b6bff"/>
+      <stop offset="0.55" stop-color="#6750cc"/>
+      <stop offset="1" stop-color="#4a36a8"/>
+    </linearGradient>
+    <linearGradient id="xaiBand2" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a58bff"/>
+      <stop offset="0.5" stop-color="#7a63d6"/>
+      <stop offset="1" stop-color="#5440b5"/>
+    </linearGradient>
+    <linearGradient id="xaiPlay" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9d2ff"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#1d1e2b"/>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="none" stroke="#3a3560" stroke-width="1.6"/>
+  <path d="M14 14 L27.5 32 L14 50 L22.5 50 L32 37 L41.5 50 L50 50 L36.5 32 L50 14 L41.5 14 L32 27 L22.5 14 Z"
+        fill="url(#xaiBand)" opacity="0.96"/>
+  <path d="M50 14 L36.5 32 L50 50 L41.5 50 L32 37 L22.5 50 L14 50 L27.5 32 L14 14 L22.5 14 L32 27 L41.5 14 Z"
+        fill="url(#xaiBand2)" opacity="0.55"/>
+  <path d="M28 24.5 L41 32 L28 39.5 Z" fill="url(#xaiPlay)"/>
+</svg>

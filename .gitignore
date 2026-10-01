@@ -1,0 +1,11 @@
+# 私人数据永远不入库
+private/
+.local/
+tunnel/
+server.log
+test-results/
+__pycache__/
+*.pyc
+
+# 运行时生成的压缩缓存（服务首次请求时自动重建）
+app/vendor/ffmpeg-core/*.gz
