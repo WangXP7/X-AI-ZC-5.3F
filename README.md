@@ -2,16 +2,24 @@
 
 依据 `docs/X-AI详细设计文档.md` 实现的纯静态网页视频操作平台：在本机浏览器中编排分镜、
 管理图片 / 声音素材，调用 AgnesAI 生成视频，取回后在本地校验、人工审核、按集拼接。
-本次实现在应用之外增加了一层**授权密码网关**，使公网可通过 URL 访问但必须先输入授权密码。
+提供两种发布形态，都要求先输入**授权密码**：
+
+| 形态 | 地址 | 密码门 | 说明 |
+|---|---|---|---|
+| GitHub Pages 项目站点 | `https://wangxp7.github.io/X-AI-ZC-5.3F/` | 客户端门（PBKDF2 哈希校验，准入门槛） | 由 `.github/workflows/pages.yml` 把 `app/` 发布为站点 |
+| 本机 / 隧道（服务端网关） | `http://127.0.0.1:8080/` 或隧道 URL | 服务端门（会话 Cookie，强边界） | `tools/server.py` + `tools/tunnel-keeper.py` |
+
+两种形态自动互斥：在服务端网关后面时（`/auth-state` 返回 `serverGate:true`），客户端门不再二次询问。
+如实说明：静态托管上的客户端门是共享口令的**准入门槛**，不是安全边界；需要强边界请用网关形态。
 
 ## 快速开始
 
 | 步骤 | 操作 |
 |---|---|
 | 启动本机服务 | 双击 `tools/start-x-ai.cmd`（或 `python tools/server.py --open`），访问 <http://127.0.0.1:8080/> |
-| 授权密码 | 保存在 `private/auth-password.txt`；首次运行自动生成并打印在控制台 |
-| 发布公网 | 双击 `tools/publish-tunnel.cmd`，按提示用输出的公网 URL 访问（需授权密码） |
-| 保持公网在线 | `python tools/tunnel-keeper.py`：断线自动重连（pinggy / serveo 轮换），最新 URL 实时写入 `tunnel/CURRENT-URL.txt` |
+| 授权密码 | 保存在 `private/auth-password.txt`（不入库）；首次运行自动生成并打印在控制台 |
+| 发布公网（强门） | 双击 `tools/publish-tunnel.cmd`，或常驻 `python tools/tunnel-keeper.py`（最新 URL 写入 `tunnel/CURRENT-URL.txt`） |
+| 发布项目站点 | 推送到 GitHub 后，在仓库 Settings → Pages → Source 选 **GitHub Actions**，工作流自动把 `app/` 发布上线 |
 | 使用浏览器 | 桌面版 Chrome / Edge（需要 File System Access、Web Locks、Web Crypto） |
 
 生成视频需要使用者自己的 AgnesAI KEY（`sk-` 开头）。发布版不包含任何私人密钥：

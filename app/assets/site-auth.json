@@ -1,0 +1,7 @@
+{
+  "format": "x-ai-site-gate-v1",
+  "note": "静态站点客户端密码门：PBKDF2-SHA256 哈希比对。这是共享口令的准入门槛，不是安全边界；强密码门见 tools/server.py。",
+  "iterations": 310000,
+  "salt": "9c7644cab79f291e67ee7c6f4df584d8",
+  "hash": "875046d68443ae032cc3284e31d2bc6fa91fc67b031c963acb64d3c9993d4d5c"
+}
