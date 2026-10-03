@@ -121,7 +121,8 @@ def try_provider(p, attempt_log):
     """启动一个 ssh 并保持运行：提取 URL → 本网络验证可达。
     返回 (proc, url)：成功时 proc 仍运行（持有隧道）；失败时返回 (None, None)。"""
     attempt_log.write_bytes(b"")  # 清空上一轮日志，避免匹配到旧 URL
-    proc = subprocess.Popen(p["argv"], stdout=attempt_log.open("wb"), stderr=subprocess.STDOUT)
+    out_handle = attempt_log.open("ab")  # 保存句柄引用，防止 GC 提前关闭
+    proc = subprocess.Popen(p["argv"], stdout=out_handle, stderr=subprocess.STDOUT)
     url = None
     deadline = time.time() + 25
     while time.time() < deadline and url is None:
