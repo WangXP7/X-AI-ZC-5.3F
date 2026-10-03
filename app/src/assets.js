@@ -60,42 +60,39 @@ export class AssetManager {
     const file = it.file;
     const buf = await file.arrayBuffer();
     const sha = await sha256Hex(buf);
-    // 重复复用（同字节）
-    const dup = this.project.assets.find(a => a.sha256 === sha);
     const kind = it.kind;
     let meta = { errors: [], width: 0, height: 0, duration: 0 };
     if (kind === 'image') meta = await inspectImageFile(file);
     else meta = await inspectAudioFile(file);
     if (meta.errors.some(e => e.includes('150MB'))) throw new Error(meta.errors.join('；'));
-
+    // 去重：只有同名且 SHA-256 相同才复用同一身份（第 27.2 章）；字节同但文件名不同分别登记
+    const dup = this.project.assets.find(a => a.name === file.name && a.sha256 === sha);
     if (dup) {
-      // 合并本次路径 / 别名信息
       if (!dup.aliases?.includes(file.name)) dup.aliases = [...(dup.aliases || []), file.name];
-      if (kind === 'image' && meta.errors.length) {
-        dup.errors = meta.errors;
-        return { status: 'warning', assetId: dup.id, note: `复用已有素材；${meta.errors.join('；')}` };
-      }
-      return { status: 'duplicate', assetId: dup.id, note: `与已有素材字节相同，已复用（${dup.name}）` };
+      // 缓存缺失时用本次已核验数据补齐，不制造第二份记录
+      if (!dup.blobKey) dup.blobKey = await blobStore.put(new Blob([buf], { type: file.type || 'application/octet-stream' }));
+      if (kind === 'image' && meta.errors.length) return { status: 'warning', assetId: dup.id, note: `复用已有素材；${meta.errors.join('；')}` };
+      return { status: 'duplicate', assetId: dup.id, note: `同名同内容，已复用（${dup.name}）` };
     }
-
     const blobKey = await blobStore.put(new Blob([buf], { type: file.type || 'application/octet-stream' }));
     const isImage = kind === 'image';
-    const rel = `references/${file.name}`;
+    // 未修改原素材一律 storage=source：原件不写、不改名、不复制到输出 references（第 30.2 章）。
+    // 浏览器保留工作缓存（blobKey）用于预览、校验与恢复。
     const asset = {
       id: uuid(), kind, name: file.name, type: file.type || (isImage ? 'image/*' : 'audio/*'),
       bytes: file.size, sha256: sha, errors: meta.errors || [], width: meta.width || 0, height: meta.height || 0,
-      duration: meta.duration || 0, blobKey, path: rel, aliases: [file.name],
-      createdAt: nowIso(), status: 'success',
+      duration: meta.duration || 0, blobKey, path: '', storage: 'source',
+      sources: [], aliases: [file.name], legacyPaths: [],
+      createdAt: nowIso(), status: meta.errors.length ? 'warning' : 'success',
+      sourceNote: '原素材（浏览器工作缓存；仅引用，不写入输出目录）',
     };
-    // 管理副本落盘（无目录时仅浏览器保存）
-    if (this.dirHandle) {
-      try { await persistAssetFile(this.dirHandle, asset, new Blob([buf], { type: asset.type }), this.project); }
-      catch (e) { asset.status = 'warning'; asset.errors.push(`磁盘写入失败：${e.message}`); }
-    } else {
-      asset.path = ''; // 仅浏览器副本
-    }
     this.project.assets.push(asset);
-    this.logEvent('asset-import', `${asset.name} sha256=${sha.slice(0, 12)}…`, null);
+    // 纳入当前 Studio 成员
+    import('./core.js').then(({ activeStudio }) => {
+      const st = activeStudio(this.project);
+      if (!st.assetIds.includes(asset.id)) st.assetIds.push(asset.id);
+    }).catch(() => {});
+    this.logEvent('asset-import', `${asset.name} sha256=${sha.slice(0, 12)}…（源引用）`, null);
     return { status: asset.errors.length ? 'warning' : 'success', assetId: asset.id, note: asset.errors.join('；') };
   }
 
@@ -115,36 +112,38 @@ export class AssetManager {
       onItem?.(it);
       if (it.status !== 'pending') { out.push(it); continue; }
       try {
-        const a = it.asset;
+        let a = it.asset;
+        // 1.0 错误命名的旧派生版再次优化：以原 Asset 为本次输入（第 27.3 章）
+        if (a.derivedFrom && a.name !== (this.project.assets.find(x => x.id === a.derivedFrom)?.name ?? a.name)) {
+          const orig = this.project.assets.find(x => x.id === a.derivedFrom);
+          if (orig) { a = orig; it.asset = orig; }
+        }
         const blob = await blobStore.get(a.blobKey);
         if (!blob) throw new Error('浏览器中的原图副本丢失，请重新导入');
-        const keepFormat = !!a.path; // 原路径素材保留原格式
-        const opt = await optimizeImageFile(blob, { keepFormat });
+        const opt = await optimizeImageFile(blob, { keepFormat: true });
         const optSha = await sha256Hex(await opt.blob.arrayBuffer());
-        // 已有同一派生版则复用
-        let derived = this.project.assets.find(x => x.derivedFrom === a.id && x.sha256 === optSha);
+        // 同一原图已有相同派生结果则复用（按内容与目标名判断）
+        const origName = a.name;
+        let derived = this.project.assets.find(x => x.derivedFrom === a.id && x.sha256 === optSha && x.name === origName);
         if (!derived) {
-          const baseName = a.name.replace(/\.[^.]+$/, '');
-          const ext = opt.ext;
-          // 同名冲突：不同来源同名或原文件就在目标路径 → 用 素材ID/原名
-          const samePathExists = this.project.assets.some(x => x !== a && x.path === `references/${baseName}.${ext}`);
-          const rel = samePathExists ? `references/${a.id}/${baseName}.${ext}` : `references/${baseName}.${ext}`;
+          const versionId = uuid();
+          const rel = `references/optimized/${a.id}/${versionId}/${origName}`;
           const blobKey = await blobStore.put(opt.blob);
           derived = {
-            id: uuid(), kind: 'image', name: `${baseName}.${ext}`, type: opt.type,
+            id: uuid(), kind: 'image', name: origName, type: opt.type,
             bytes: opt.blob.size, sha256: optSha, width: opt.width, height: opt.height,
-            duration: 0, blobKey, path: rel, aliases: [`${baseName}.${ext}`],
-            derivedFrom: a.id, transform: `长边≤2048 等比缩放并补边至 0.4–2.5 比例；格式 ${opt.type}`,
+            duration: 0, blobKey, path: rel, aliases: [origName],
+            derivedFrom: a.id, versionId,
+            transform: `同名优化：长边≤2048 等比缩放并补边至 0.4–2.5 比例；保持 ${opt.type} 实际编码`,
             errors: [], createdAt: nowIso(), status: 'success',
           };
           this.project.assets.push(derived);
           if (this.dirHandle) {
-            try { await persistAssetFile(this.dirHandle, derived, opt.blob, this.project); }
-            catch (e) { derived.status = 'warning'; derived.errors.push(`磁盘写入失败：${e.message}`); }
+            await persistAssetFile(this.dirHandle, derived, opt.blob, this.project);
           }
         }
         a.effectiveAssetId = derived.id;
-        it.status = 'success'; it.note = `优化为 ${derived.width}×${derived.height} ${derived.name}`;
+        it.status = 'success'; it.note = `优化为 ${derived.width}×${derived.height}（同名 ${origName}）`;
         it.derived = derived;
       } catch (e) {
         it.status = 'error'; it.note = e.message || String(e);

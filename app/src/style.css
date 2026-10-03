@@ -64,6 +64,60 @@ code { background: #efede7; padding: 1px 5px; border-radius: 4px; font-size: 13p
   background: linear-gradient(100deg, #7a5cff, #b26ee3 55%, #6750cc);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+/* 1.1 标语：整体无衬线、两行、无渐变（第 27.8 章） */
+.slogan-line { font-size: 14px; color: #4a3aa0; font-weight: 600; letter-spacing: .3px; line-height: 1.5; }
+
+/* ---------- 1.2 顶栏版本切换（第 35.1 章） ---------- */
+.topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.topbar > h1 { grid-column: 1; }
+.topbar-actions { grid-column: 3; display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.exp-switch { grid-column: 2; display: inline-flex; align-items: center; gap: 8px; justify-self: center; }
+.exp-opt {
+  padding: 6px 16px; border-radius: 999px; border: 1.5px solid #d4d1c8; background: #fff;
+  font-size: 14px; cursor: pointer;
+}
+.exp-opt[aria-pressed="true"] { background: var(--batch); border-color: var(--batch); color: #fff; font-weight: 600; }
+.exp-hint { font-size: 13px; color: var(--muted); }
+@media (max-width: 980px) { .exp-switch { grid-column: 1 / -1; grid-row: 2; justify-self: start; } .topbar { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .exp-hint { display: none; } }
+
+/* ---------- PavoAI（第 34.5 章） ---------- */
+.editor-pavo { border-top: 3px solid var(--batch); background: linear-gradient(180deg, #fbfaff, #f5f1fd); }
+.pavo-compose textarea { font-size: 16px; min-height: 96px; border-radius: 14px; border-color: #d8d0f0; }
+.pavo-bottom { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.pavo-bottom select { max-width: 240px; }
+.pavo-settings { position: relative; }
+.pavo-settings summary { list-style: none; cursor: pointer; padding: 7px 12px; border: 1px solid #d4d1c8; border-radius: 9px; background: #fff; font-size: 14px; }
+.pavo-settings summary::-webkit-details-marker { display: none; }
+.pavo-pop {
+  position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30; width: 280px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+  box-shadow: 0 10px 34px rgba(30, 30, 60, .18);
+}
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 5px 0 10px; }
+.chip-row button { padding: 5px 12px; border-radius: 999px; border: 1.5px solid #d4d1c8; background: #fff; cursor: pointer; font-size: 13.5px; }
+.chip-row button.on { border-color: var(--batch); background: var(--batch-bg); color: var(--batch-dark); font-weight: 600; }
+.pavo-send {
+  margin-left: auto; width: 44px; height: 44px; border-radius: 50%; border: 0; cursor: pointer;
+  background: #22703f; color: #fff; font-size: 20px; font-weight: 700;
+}
+.pavo-send:hover { background: #1d5c37; }
+.pavo-send:disabled { opacity: .5; cursor: not-allowed; }
+.pavo-send:focus-visible { outline: 2px solid #6750cc88; }
+
+/* ---------- 动态进度卡（第 32/33 章） ---------- */
+.qprogress { padding: 12px 16px; }
+.qp-top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.qp-nums { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+.qp-nums b { font-size: 16px; color: var(--ink); margin-right: 4px; }
+.qp-overall { display: flex; align-items: center; gap: 8px; min-width: 180px; flex: 0 0 auto; }
+.qp-bar { width: 140px; height: 8px; border-radius: 999px; background: #efede7; overflow: hidden; }
+.qp-bar > div { height: 100%; background: var(--ok); width: 0; transition: width .5s; }
+.qp-pct { font-size: 14px; }
+.qp-current { margin-left: auto; font-size: 14px; color: var(--muted); }
+.small-select { padding: 5px 8px; font-size: 13.5px; border-radius: 8px; border: 1px solid #cfcdc4; max-width: 150px; }
+#asset-filter-q { max-width: 170px; }
+.muted-line { color: var(--muted); font-size: 13px; }
 
 .main { flex: 1 1 auto; min-width: 0; padding: 18px 26px 40px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
