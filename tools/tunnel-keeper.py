@@ -51,9 +51,15 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 def log(msg):
     line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
-    print(line, flush=True)
-    with LOG_FILE.open("a", encoding="utf-8") as f:
-        f.write(line + "\n")
+    try:
+        print(line, flush=True)
+    except Exception:
+        pass
+    try:
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + chr(10))
+    except Exception:
+        pass  # 日志失败不能让守护退出
 
 
 def write_url(url, provider):
@@ -183,8 +189,18 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        log("守护已停止")
-        sys.exit(0)
+    while True:
+        try:
+            main()
+            break
+        except KeyboardInterrupt:
+            log("守护已停止")
+            sys.exit(0)
+        except SystemExit as e:
+            if int(str(e) or 0) == 0:
+                break
+            log(f"守护以退出码 {e} 结束，10 秒后整体重启")
+            time.sleep(10)
+        except BaseException as e:
+            log(f"守护异常：{type(e).__name__}: {e}；10 秒后整体重启")
+            time.sleep(10)
