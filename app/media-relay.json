@@ -1,0 +1,7 @@
+{
+  "protocol": "x-ai-media-v1",
+  "pageOrigins": ["https://wangxp7.github.io"],
+  "endpoint": "http://127.0.0.1:4183/__xai_media",
+  "allowedMediaHosts": ["cos-platform-outputs.agnes-ai.cn"],
+  "note": "仅允许列出的页面来源走本机取片通道；端口变更须同步本文件与 CSP。"
+}

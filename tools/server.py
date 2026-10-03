@@ -11,6 +11,7 @@
 """
 import argparse
 import html
+import media_session
 import json
 import mimetypes
 import os
@@ -195,6 +196,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/healthz":
             return self._send(200, b"ok", "text/plain; charset=utf-8", cache="no-store")
 
+        if path == "/__xai_health":
+            body = json.dumps({"app": "X-AI", "version": "1.2.7"}).encode("utf-8")
+            return self._send(200, body, "application/json; charset=utf-8", cache="no-store")
+
+        if path == "/__xai_media_session":
+            return self._media_session_get()
+
+        if path == "/__xai_media":
+            return self._media_post()
+
         if not self._authorized():
             if path == "/logo.svg":
                 # 登录页需要 logo；logo 不含任何秘密
@@ -247,6 +258,107 @@ class Handler(BaseHTTPRequestHandler):
 
         cookie = f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}"
         return self._send(302, b"", "text/plain", [("Location", "/"), ("Set-Cookie", cookie)])
+
+    # ---------- 媒体中继（第 40 章） ----------
+    def _media_cors(self, origin):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-XAI-Media-Token")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+
+    def _media_session_get(self):
+        origin = self.headers.get("Origin", "")
+        if origin not in media_session.ALLOWED_ORIGINS:
+            return self._send(403, b'{"error":"origin not allowed"}', "application/json; charset=utf-8", cache="no-store")
+        sess = media_session.issue_session(origin)
+        if not sess:
+            return self._send(403, b'{"error":"origin not allowed"}', "application/json; charset=utf-8", cache="no-store")
+        body = json.dumps(sess).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        origin = self.headers.get("Origin", "")
+        if origin in media_session.ALLOWED_ORIGINS and urlparse(self.path).path in ("/__xai_media", "/__xai_media_session"):
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-XAI-Media-Token")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self._send(204, b"", "text/plain")
+
+    def _media_post(self):
+        origin = self.headers.get("Origin", "")
+        token = self.headers.get("X-XAI-Media-Token", "")
+        if origin not in media_session.ALLOWED_ORIGINS or not media_session.verify_session(token, origin):
+            # 丢弃最多 8KB 请求体，避免 Windows 因未读字节把 403 变成连接重置（第 40.4 章）
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                while n > 0:
+                    chunk = self.rfile.read(min(n, 8192))
+                    if not chunk:
+                        break
+                    n -= len(chunk)
+            except Exception:
+                pass
+            return self._send(403, b'{"error":"media_session_required"}', "application/json; charset=utf-8", cache="no-store")
+        try:
+            length = min(int(self.headers.get("Content-Length") or 0), 8192)
+            req = json.loads(self.rfile.read(length).decode("utf-8", "replace") or "{}")
+            url = req.get("url", "")
+        except Exception:
+            return self._send(400, b'{"error":"bad request"}', "application/json; charset=utf-8")
+        if not media_session.media_url_allowed(url):
+            return self._send(400, b'{"error":"url not allowed"}', "application/json; charset=utf-8")
+        try:
+            import urllib.request
+            up_req = urllib.request.Request(url, headers={"User-Agent": "X-AI-LocalMedia/1.2.7"})
+            up = urllib.request.urlopen(up_req, timeout=180)
+        except Exception as e:
+            body = json.dumps({"error": "upstream_unavailable", "message": str(e)[:120]}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        try:
+            total = int(up.headers.get("Content-Length") or 0)
+            if total > 512 * 1024 * 1024:
+                up.close()
+                return self._send(413, b'{"error":"too large"}', "application/json; charset=utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", up.headers.get("Content-Type") or "application/octet-stream")
+            self.send_header("Content-Length", str(total))
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.end_headers()
+            remaining = total if total else 512 * 1024 * 1024
+            while True:
+                chunk = up.read(65536)
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                if total and remaining < 0:
+                    up.close()
+                    return
+                self.wfile.write(chunk)
+        finally:
+            try:
+                up.close()
+            except Exception:
+                pass
 
     # ---------- 静态文件 ----------
     def _serve_file(self, rel: str):
@@ -345,6 +457,12 @@ def main():
 
     password = load_password(Path(args.password_file), quiet=args.quiet)
     Handler.root = Path(args.root).resolve()
+    try:
+        relay_cfg = json.loads((Handler.root / 'media-relay.json').read_text(encoding='utf-8'))
+        media_session.configure(relay_cfg.get('pageOrigins'), relay_cfg.get('allowedMediaHosts'))
+        print('[server] 媒体中继已启用：来源', relay_cfg.get('pageOrigins'))
+    except Exception as e:
+        print('[server] 媒体中继未启用：', e)
     Handler.gate = Gate(password)
     Handler.verbose = not args.quiet
 

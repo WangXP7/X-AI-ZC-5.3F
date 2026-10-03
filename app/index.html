@@ -58,8 +58,9 @@
     </div>
 
     <div class="side-foot">
-      <div class="version-line">X-AI 1.0　<span class="reg">®</span> YiQiXP</div>
-      <div class="art-line">让X-AI把你的故事美梦成真！</div>
+      <div class="version-line">X-AI 1.2.7　<span class="reg">®</span> YiQiXP</div>
+      <div class="slogan-line">让X-AI和你创造</div>
+      <div class="slogan-line">属于你的故事</div>
     </div>
   </aside>
 
@@ -67,6 +68,11 @@
   <div class="main">
     <header class="topbar">
       <h1 id="page-title">创作工作台</h1>
+      <div class="exp-switch" role="group" aria-label="操作版本">
+        <button type="button" id="exp-easy" class="exp-opt" aria-pressed="false">小白版</button>
+        <button type="button" id="exp-pro" class="exp-opt" aria-pressed="false">专家版</button>
+        <span class="exp-hint" id="exp-hint">最少操作：提示词 → 素材 → 生成</span>
+      </div>
       <div class="topbar-actions">
         <button type="button" id="btn-key-status" class="key-pill" title="连接与密钥">
           <span class="key-dot" id="key-dot"></span>
@@ -101,8 +107,13 @@
       </div>
 
       <div class="mode-switch card" role="tablist" aria-label="创作模式">
+        <label class="mode-opt mode-pavo">
+          <input type="radio" name="gen-mode" value="pavo" checked>
+          <span class="mode-title">PavoAI</span>
+          <span class="mode-desc">释放您的创意 · 立即将想法变成影像</span>
+        </label>
         <label class="mode-opt mode-single">
-          <input type="radio" name="gen-mode" value="single" checked>
+          <input type="radio" name="gen-mode" value="single">
           <span class="mode-title">单段生成</span>
           <span class="mode-desc">一个分镜，逐步填写并检查入队</span>
         </label>
@@ -112,6 +123,48 @@
           <span class="mode-desc">导入清单，批量展开并整批入队</span>
         </label>
       </div>
+
+      <!-- ===== PavoAI 操作区 ===== -->
+      <fieldset id="pavo-editor" class="card editor editor-pavo">
+        <legend>PavoAI</legend>
+        <div class="pavo-compose">
+          <textarea id="pavo-prompt" rows="4" placeholder="描述画面、人物与动作；可写“视频时长7秒”明确本镜总时长。"></textarea>
+          <div class="ref-toolbar">
+            <button type="button" id="btn-pavo-assets" class="btn light small">＋ 素材库</button>
+            <span id="pavo-chips" class="ref-list"></span>
+          </div>
+          <div class="pavo-bottom">
+            <select id="pavo-model" aria-label="模型"></select>
+            <select id="pavo-generation-mode" aria-label="生成方式">
+              <option value="auto" selected>全能模式</option>
+              <option value="text">文字生成</option>
+              <option value="keyframe">首尾帧生成</option>
+            </select>
+            <details class="pavo-settings">
+              <summary id="pavo-summary" aria-expanded="false">16:9 · 12s · 720P</summary>
+              <div class="pavo-pop">
+                <div class="mini-label">画幅</div>
+                <div class="chip-row" id="pavo-aspect-row">
+                  <button type="button" data-aspect="auto">Auto</button>
+                  <button type="button" data-aspect="16:9" class="on">16:9</button>
+                  <button type="button" data-aspect="9:16">9:16</button>
+                  <button type="button" data-aspect="1:1">1:1</button>
+                  <button type="button" data-aspect="4:3">4:3</button>
+                  <button type="button" data-aspect="3:4">3:4</button>
+                  <button type="button" data-aspect="21:9">21:9</button>
+                </div>
+                <div class="mini-label">时长（秒）</div>
+                <div class="chip-row" id="pavo-seconds-row"></div>
+                <div class="mini-label">分辨率</div>
+                <div class="chip-row"><button type="button" class="on">720P</button></div>
+              </div>
+            </details>
+            <span id="pavo-position" class="muted"></span>
+            <button type="button" id="btn-pavo-generate" class="pavo-send" title="生成视频" aria-label="生成视频">↑</button>
+          </div>
+        </div>
+        <div id="pavo-feedback" class="feedback" hidden></div>
+      </fieldset>
 
       <!-- ===== 单段操作区 ===== -->
       <fieldset id="single-editor" class="card editor editor-single">
@@ -128,7 +181,7 @@
             <div class="hint">作为文件目录与拼接分组。</div>
           </div>
           <div class="field wide">
-            <label for="s-prompt">画面与动作 <span id="s-prompt-count" class="count">0 / 12000</span></label>
+            <label for="s-prompt">画面与动作描述【提示词Prompt】 <span id="s-prompt-count" class="count">0 / 12000</span></label>
             <textarea id="s-prompt" rows="5" required placeholder="一镜一个主要动作：描述画面、镜头与动作。"></textarea>
           </div>
           <div class="field">
@@ -141,21 +194,21 @@
           <div class="field">
             <label for="s-mode">生成方式</label>
             <select id="s-mode">
-              <option value="text" selected>文字生成</option>
-              <option value="reference">参考生成</option>
+              <option value="text">文字生成</option>
+              <option value="reference" selected>图像 / 声音参考生成</option>
               <option value="keyframe">首尾帧生成</option>
             </select>
           </div>
           <div class="field">
             <label for="s-seconds">片段时长（秒）</label>
-            <input id="s-seconds" type="number" min="4" max="12" step="1" value="8">
+            <input id="s-seconds" type="number" min="4" max="12" step="1" value="12">
             <div class="hint">4–12 秒整数。</div>
           </div>
           <div class="field">
             <label for="s-aspect">画面比例</label>
             <select id="s-aspect">
-              <option value="9:16" selected>9:16 竖屏</option>
-              <option value="16:9">16:9 横屏</option>
+              <option value="9:16">9:16 竖屏</option>
+              <option value="16:9" selected>16:9 横屏</option>
               <option value="1:1">1:1 方形</option>
               <option value="4:3">4:3</option>
               <option value="3:4">3:4</option>
@@ -166,6 +219,7 @@
             <label>参考素材 <span class="hint-inline">图 ≤5 张，声 ≤3 段（总长 2–12 秒）</span></label>
             <div class="ref-toolbar">
               <button type="button" id="btn-pick-assets" class="btn light small">从素材库选择</button>
+              <button type="button" id="btn-auto-associate" class="btn light small">自动关联素材库</button>
               <button type="button" id="btn-add-files" class="btn light small">添加本地文件</button>
               <input type="file" id="s-files" multiple accept="image/png,image/jpeg,image/webp,audio/*" hidden>
             </div>
@@ -226,13 +280,13 @@
           <div class="form-grid">
             <div class="field">
               <label for="b-seconds">默认时长（秒）</label>
-              <input id="b-seconds" type="number" min="4" max="12" step="1" value="8">
+              <input id="b-seconds" type="number" min="4" max="12" step="1" value="12">
             </div>
             <div class="field">
               <label for="b-aspect">默认画幅</label>
               <select id="b-aspect">
-                <option value="9:16" selected>9:16</option>
-                <option value="16:9">16:9</option>
+                <option value="9:16">9:16</option>
+                <option value="16:9" selected>16:9</option>
                 <option value="1:1">1:1</option>
                 <option value="4:3">4:3</option>
                 <option value="3:4">3:4</option>
@@ -273,9 +327,24 @@
     <section id="page-tasks" class="page">
       <div class="card queue-controls">
         <button type="button" id="btn-run-queue" class="btn primary">开始 / 继续队列</button>
+        <button type="button" id="btn-refresh-status" class="btn light small">刷新状态</button>
         <button type="button" id="btn-pause-new" class="btn light">暂停新提交</button>
         <button type="button" id="btn-export-md" class="btn light">导出制作过程 MD</button>
         <span id="queue-state" class="muted"></span>
+        <span id="watchdog-info" class="muted"></span>
+      </div>
+      <div class="card qprogress" id="qprogress">
+        <div class="qp-top">
+          <div class="qp-nums">
+            <span><b id="qp-total">0</b> 总任务</span>
+            <span><b id="qp-ready">0</b> 已就绪</span>
+            <span><b id="qp-active">0</b> 处理中</span>
+            <span><b id="qp-pending">0</b> 待提交</span>
+            <span><b id="qp-issue">0</b> 需处理</span>
+          </div>
+          <div class="qp-overall"><div class="qp-bar"><div id="qp-bar-fill"></div></div><span id="qp-pct">0%</span></div>
+          <div class="qp-current" id="qp-current">空闲</div>
+        </div>
       </div>
       <div id="job-list" class="job-list"></div>
       <button type="button" id="btn-more-jobs" class="btn light wide-btn" hidden>显示更多</button>
@@ -290,6 +359,25 @@
     <section id="page-assets" class="page">
       <div class="card asset-toolbar">
         <button type="button" id="btn-asset-add" class="btn primary">添加素材</button>
+        <select id="asset-filter-version" class="small-select">
+          <option value="effective" selected>当前有效</option>
+          <option value="original">原始素材</option>
+          <option value="derived">优化 / 派生</option>
+          <option value="all">全部版本</option>
+        </select>
+        <select id="asset-filter-kind" class="small-select">
+          <option value="all" selected>图片与声音</option>
+          <option value="image">图片</option>
+          <option value="audio">声音</option>
+        </select>
+        <select id="asset-filter-status" class="small-select">
+          <option value="all" selected>全部校验</option>
+          <option value="ok">格式检查通过</option>
+          <option value="pending">待处理</option>
+        </select>
+        <input id="asset-filter-q" type="text" placeholder="文件名 / 编号 / 路径" class="small-select">
+        <button type="button" id="btn-asset-clear-lib" class="btn light small">清空素材库</button>
+        <button type="button" id="btn-asset-restore" class="btn light small" hidden>恢复已清空素材</button>
         <input type="file" id="asset-files" multiple accept="image/png,image/jpeg,image/webp,audio/*" hidden>
         <button type="button" id="btn-asset-all" class="btn light small">全选</button>
         <button type="button" id="btn-asset-opt-candidates" class="btn light small">选待优化</button>

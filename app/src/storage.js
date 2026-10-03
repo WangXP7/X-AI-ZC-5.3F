@@ -43,21 +43,62 @@ export const idb = {
 
 // ---------- 项目工作副本（串行保存链） ----------
 let saveChain = Promise.resolve();
+let _lastProjectJson = '';      // 内容相同跳过重写（第 31.3 章）
+let _lastMappingJson = '';
 export function loadProject() { return idb.get('state', 'project'); }
 export function loadRate() { return idb.get('state', 'rate'); }
 export function saveRate(rate) { return idb.set('state', 'rate', rate); }
 export function saveVault(vault) { return idb.set('state', 'vault', vault); }
 export function loadVault() { return idb.get('state', 'vault'); }
 
-export function saveProject(project) {
-  // Promise 链保证串行快照，避免保存互相覆盖。
+let _outputDir = null;
+export function setOutputDir(dirHandle) { _outputDir = dirHandle || null; }
+
+export function saveProject(project, { deferMapping = false } = {}) {
+  // Promise 链保证串行快照。deferMapping=true 时本轮只保存 project.json，
+  // reference-mapping.json 由批处理结束 / onChange 完整刷新（第 31.3 章）。
   const run = saveChain.then(async () => {
     project.updatedAt = nowIso();
+    const json = JSON.stringify(redact(project), null, 2);
+    const changed = json !== _lastProjectJson;
     await idb.set('state', 'project', project);
+    _lastProjectJson = json;
+    const dir = _outputDir;
+    if (dir) {
+      if (changed) {
+        try { await writeFile(dir, 'project.json', json); } catch (e) { noteWriteDiag('project.json', 'write', e); }
+      }
+      if (!deferMapping) {
+        try { await writeMappingIfChanged(dir, project); } catch (e) { noteWriteDiag('reference-mapping.json', 'write', e); }
+      }
+    }
     return true;
   });
   saveChain = run.catch(() => {});
   return run;
+}
+
+async function writeMappingIfChanged(dir, project) {
+  const mapping = buildReferenceMapping(project);
+  const json = JSON.stringify(mapping, null, 2);
+  if (json === _lastMappingJson) return; // 映射无变化不重写（不因 at 时间变化而写）
+  await writeFile(dir, 'reference-mapping.json', json);
+  _lastMappingJson = json;
+}
+
+// 写入诊断（第 31.4 章）：最近 50 条本地异常或恢复记录；不含字节、密钥、提示词、绝对盘符。
+export async function noteWriteDiag(relPath, stage, err, outcome = null) {
+  try {
+    const list = (await idb.get('state', 'write-diagnostics')) || [];
+    list.push({
+      at: nowIso(), path: relPath, stage,
+      code: err?.name || String(err).slice(0, 40),
+      message: String(err?.message || err).slice(0, 120),
+      outcome: outcome || '',
+    });
+    while (list.length > 50) list.shift();
+    await idb.set('state', 'write-diagnostics', list);
+  } catch { /* 诊断失败不影响业务 */ }
 }
 
 // ---------- Blob ----------
@@ -96,18 +137,60 @@ export async function ensurePermission(handle, mode = 'readwrite') {
 }
 
 async function writeFile(dirHandle, relPath, data, { createDirs = true } = {}) {
+  // 稳定本地写入协议（第 31.2 章）：输入先固化为稳定字节；每次尝试重新查找各级句柄；
+  // createWritable(exclusive)；close 后回读核对 SHA；仅短暂状态错误有限重试（150/450/1000/2000ms，最多 5 次）。
   const parts = relPath.split('/').filter(Boolean);
-  let dir = dirHandle;
-  for (const p of parts.slice(0, -1)) {
-    if (createDirs) dir = await dir.getDirectoryHandle(p, { create: true });
-    else dir = await dir.getDirectoryHandle(p);
+  const expectedSha = await sha256Hex(await toStableBlob(data).arrayBuffer());
+  const backoffs = [150, 450, 1000, 2000];
+  let lastErr = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, backoffs[Math.min(attempt - 1, backoffs.length - 1)]));
+    let w = null;
+    try {
+      let dir = dirHandle;
+      for (const p of parts.slice(0, -1)) {
+        dir = createDirs ? await dir.getDirectoryHandle(p, { create: true }) : await dir.getDirectoryHandle(p);
+      }
+      const fh = await dir.getFileHandle(parts.at(-1), { create: true });
+      w = await fh.createWritable({ mode: 'exclusive' });
+      await w.write(await toStableBlob(data));
+      await w.close(); w = null;
+      // 回读核对：内容与预期一致才算成功；close 后报错但内容一致 → verified-after-error
+      const back = await readFileFromHandle(dirHandle, relPath);
+      const backSha = await sha256Hex(await back.arrayBuffer());
+      if (backSha !== expectedSha) {
+        const e = new Error('写入内容与预期不一致'); e.name = 'WriteVerificationError';
+        throw e;
+      }
+      return true;
+    } catch (e) {
+      if (w) { try { await w.abort(); } catch { /* ignore */ } w = null; }
+      lastErr = e;
+      const transient = ['InvalidStateError', 'NotReadableError', 'NoModificationAllowedError', 'AbortError'].includes(e.name);
+      if (e.name === 'WriteVerificationError') { await noteWriteDiag(relPath, 'verify', e, 'failed'); throw e; }
+      if (!transient) {
+        await noteWriteDiag(relPath, 'open/write', e, 'failed');
+        throw e; // 权限、空间等不盲重试
+      }
+      // 短暂错误：可能已提交成功——先重读核对
+      try {
+        const back = await readFileFromHandle(dirHandle, relPath);
+        const backSha = await sha256Hex(await back.arrayBuffer());
+        if (backSha === expectedSha) { await noteWriteDiag(relPath, 'verify', e, 'verified-after-error'); return true; }
+      } catch { /* 仍不可读，继续重试 */ }
+      await noteWriteDiag(relPath, 'open/write', e, 'retry');
+    }
   }
-  const fh = await dir.getFileHandle(parts.at(-1), { create: true });
-  const w = await fh.createWritable();
-  await w.write(data);
-  await w.close();
+  throw lastErr || new Error('写入失败');
 }
-export { writeFile };
+
+export { writeFile, fileExists };
+
+async function toStableBlob(data) {
+  if (data instanceof Blob) return data;
+  if (data instanceof File) return new Blob([await data.arrayBuffer()], { type: data.type || 'application/octet-stream' }); // 先读成稳定字节，避免读写同文件失效
+  return new Blob([data]);
+}
 
 async function fileExists(dirHandle, relPath) {
   const parts = relPath.split('/').filter(Boolean);
@@ -118,7 +201,6 @@ async function fileExists(dirHandle, relPath) {
     return true;
   } catch { return false; }
 }
-export { fileExists };
 
 export async function readFileFromHandle(rootHandle, relPath) {
   const parts = relPath.split('/').filter(Boolean);

@@ -1,15 +1,16 @@
 // core.js — 通用规则、状态标签、校验与脱敏。全部为纯函数，不接触 DOM。
-// 设计依据：docs/X-AI详细设计文档.md 第 8、9、12 章。
+// 设计依据：docs/X-AI详细设计文档.md 第 8、9、12、27、34、36 章。
+import { MODEL_PROFILES, DEFAULT_PROFILE_ID, modeLimits } from './models.js';
 
 export const SCHEMA = 'x-ai-project-v1';
 export const MODEL_ID = 'agnes-video-2.5-flash';
-export const MODEL_DISPLAY = 'AgnesAI · Agnes Video 2.5 Flash · 720P · 最长 12 秒';
+export const MODEL_DISPLAY = 'AgnesAI · Agnes Video 2.5 Flash · 720P · 请求上限 12 秒';
 export const ORIGINS = ['https://api.agnes-ai.cn', 'https://apihub.agnes-ai.com'];
 export const ASPECT_DIMS = {
   '9:16': [720, 1280], '16:9': [1280, 704], '1:1': [720, 720],
   '4:3': [960, 720], '3:4': [720, 960], '21:9': [1680, 720],
 };
-export const AUTH_GAP_MIN = 90;          // 每次认证请求最小间隔（秒）
+export const AUTH_GAP_MIN = 90;          // 1.2.5 起由 request-pacing 接管；此处仅保留常量供旧代码兼容
 export const PROMPT_MAX = 12000;         // JS 字符串长度计数（不是 token，也不是字节数）
 export const SEED_MAX = 2147483647;
 export const IMAGE_BYTES_MAX_EXCL = 15_000_000;   // API 参考文件 <15MB
@@ -81,11 +82,41 @@ export function safeFilePart(s) {
 // ---------- 项目 / Job ----------
 export function makeProject(name = '我的视频项目') {
   const t = nowIso();
+  const studioId = uuid();
   return {
     schema: SCHEMA, id: uuid(), name, createdAt: t, updatedAt: t,
-    settings: { origin: ORIGINS[0], connection: 'direct', gap: AUTH_GAP_MIN },
+    settings: { origin: ORIGINS[0], connection: 'direct', gap: AUTH_GAP_MIN, submitGapSeconds: 61 },
+    studios: [{ id: studioId, name, createdAt: t, assetIds: [], archivedAssetIds: [], draft: null }],
+    activeStudioId: studioId,
     jobs: [], assets: [], episodes: [], events: [],
+    queueControl: { paused: false },
   };
+}
+
+// ensureStudios：为没有 studios 的旧记录创建初始成员，把现有 Assets 纳入（第 27.7 章）。
+export function ensureStudios(project) {
+  if (!Array.isArray(project.studios) || !project.studios.length) {
+    project.studios = [{
+      id: uuid(), name: project.name || '我的视频项目', createdAt: nowIso(),
+      assetIds: (project.assets || []).map(a => a.id),
+      archivedAssetIds: [], draft: null,
+    }];
+  }
+  if (!project.studios.some(s => s.id === project.activeStudioId)) {
+    project.activeStudioId = project.studios[0].id;
+  }
+  // 成员存在性：剔除指向不存在 Asset 的成员
+  const ids = new Set((project.assets || []).map(a => a.id));
+  for (const s of project.studios) {
+    s.assetIds = (s.assetIds || []).filter(id => ids.has(id));
+    s.archivedAssetIds = (s.archivedAssetIds || []).filter(id => ids.has(id));
+  }
+  return project;
+}
+
+export function activeStudio(project) {
+  ensureStudios(project);
+  return project.studios.find(s => s.id === project.activeStudioId) || project.studios[0];
 }
 
 export function newJob(spec) {
@@ -99,7 +130,10 @@ export function newJob(spec) {
     textSources: spec.textSources || [], referenceReplacements: spec.referenceReplacements || [],
     state: 'pending', review: 'pending', attempts: [], current: null,
     error: null, progress: 0, revisionReason: '',
-    createdAt: t, updatedAt: t, reviewedAt: null,
+    durationSource: spec.durationSource || 'default', promptSeconds: spec.promptSeconds ?? null,
+    profileId: spec.profileId || DEFAULT_PROFILE_ID, experience: spec.experience || '',
+    creationMode: spec.creationMode || '', studioId: spec.studioId || '', studioName: spec.studioName || '',
+    autoSubmit: !!spec.autoSubmit, createdAt: t, updatedAt: t, reviewedAt: null,
   };
 }
 
@@ -125,13 +159,32 @@ export function validateProjectFile(p) {
   if (inflight.length > 1) errs.push(`发现 ${inflight.length} 个在途任务，最多允许 1 个`);
   if (!p.settings || typeof p.settings !== 'object') errs.push('settings 缺失');
   else if (p.settings.origin && !ORIGINS.includes(p.settings.origin)) errs.push('settings.origin 不在允许的域名列表');
+  // Studio 结构（第 27.7 章）：ID 唯一、成员存在、活动 ID 有效、草稿类型
+  if (p.studios !== undefined) {
+    if (!Array.isArray(p.studios) || !p.studios.length) errs.push('studios 需为非空数组');
+    else {
+      const sids = new Set();
+      const aids = new Set((p.assets || []).map(a => a.id));
+      for (const s of p.studios) {
+        if (!s.id || sids.has(s.id)) errs.push('Studio ID 缺失或重复');
+        sids.add(s.id);
+        for (const k of ['assetIds', 'archivedAssetIds']) {
+          if (s[k] !== undefined && !Array.isArray(s[k])) errs.push(`Studio.${k} 需为数组`);
+          else for (const id of s[k] || []) if (!aids.has(id)) errs.push(`Studio 成员指向不存在的素材：${String(id).slice(0, 8)}…`);
+        }
+        if (s.draft !== undefined && s.draft !== null && typeof s.draft !== 'object') errs.push('Studio.draft 需为对象');
+      }
+      if (p.activeStudioId && !sids.has(p.activeStudioId)) errs.push('activeStudioId 无效');
+    }
+  }
+  if (p.queueControl !== undefined && (typeof p.queueControl !== 'object' || p.queueControl === null)) errs.push('queueControl 需为对象');
   return errs;
 }
 
 export const STATE_LABELS = {
-  draft: '草稿', invalid: '素材需处理', pending: '审核通过 · 待提交', submitting: '正在提交',
-  unknown: '提交结果待核实', queued: '服务端排队', generating: '生成中', deferred: '退避等待',
-  download: '待下载', checking: '本地校验中', ready: '已生成 · 待内容审核', approved: '内容审核通过',
+  draft: '草稿', invalid: '素材需处理', pending: '待提交', submitting: '正在提交',
+  unknown: '已提交 · 待返回', queued: '服务端排队', generating: '生成中', deferred: '退避等待',
+  download: '已生成 · 自动下载中', checking: '已下载 · 后台校验中', ready: '已生成 · 待内容审核', approved: '内容审核通过',
   needs_redo: '不合格待处理', failed: '生成失败', blocked: '需处理后继续',
 };
 export function stateBadgeKind(state) {
@@ -156,7 +209,14 @@ export function validateJob(job, project, extraJobs = []) {
   if (!isSafeId(job.episode)) errors.push(`分组「${job.episode || '空'}」不合法`);
   if (typeof job.prompt !== 'string' || !job.prompt.trim()) errors.push('画面与动作不能为空');
   else if (job.prompt.length > PROMPT_MAX) errors.push(`画面与动作超过 ${PROMPT_MAX} 字（当前 ${job.prompt.length}）`);
-  if (!Number.isInteger(job.seconds) || job.seconds < 4 || job.seconds > 12) errors.push('时长必须为 4–12 秒整数');
+  // 时长按平台 / 模式能力校验（第 34 章）：上限是请求上限，不是成片长度门槛
+  {
+    const profile = MODEL_PROFILES.find(p => p.id === (job.profileId || DEFAULT_PROFILE_ID)) || MODEL_PROFILES[0];
+    const lim = modeLimits(profile, job.mode);
+    if (!Number.isInteger(job.seconds) || job.seconds < lim.minSeconds || job.seconds > lim.maxSeconds) {
+      errors.push(`时长必须为 ${lim.minSeconds}–${lim.maxSeconds} 秒整数（当前平台 ${profile.platformName} ${job.mode} 模式请求上限 ${lim.maxSeconds} 秒）`);
+    }
+  }
   if (!ASPECT_DIMS[job.aspect]) errors.push(`画幅 ${job.aspect} 不受支持`);
   if (job.seed !== null && job.seed !== undefined && (!Number.isInteger(job.seed) || job.seed < 0 || job.seed > SEED_MAX)) errors.push('随机种子须为 0–2147483647 整数或留空');
 
@@ -227,4 +287,38 @@ export function buildRequestPrompt(job, imageNames = []) {
   }
   p += '\n\n' + buildRunConstraints(job, imageNames);
   return p;
+}
+
+// ---------- 时长 QA（第 34.8 章） ----------
+// 仅拒绝无法读取、非有限或 ≤0 的时长；有效返回不因超过请求秒数或 12 秒判致命
+// （12 秒是请求上限，不是成片长度门槛）。明显短于请求 0.5 秒仅提醒。
+export function durationQA(qa, requestedSeconds) {
+  if (!qa || !Number.isFinite(qa.duration) || qa.duration <= 0) {
+    qa.fatal = qa.fatal || [];
+    qa.fatal.push('无法读取有效视频时长');
+    qa.technical = 'failed';
+    return qa;
+  }
+  qa.fatal = (qa.fatal || []).filter(f => !/与计划|超过 12|超过12/.test(f));
+  if (requestedSeconds && qa.duration < requestedSeconds - 0.5) {
+    qa.warnings = qa.warnings || [];
+    qa.warnings.push(`实际 ${qa.duration.toFixed(2)} 秒，明显短于请求的 ${requestedSeconds} 秒，请查看是否完整`);
+  }
+  qa.technical = qa.fatal.length ? 'failed' : (qa.fullDecode === 'passed' ? 'passed' : 'partial');
+  return qa;
+}
+
+// reconcileDurationQA：仅升级"完整解码 passed + 实际时长有效 + 旧 fatal 恰为历史时长判定"的旧 QA；
+// 其他技术错误保持，人工 rejected 不自动恢复（第 34.8 章）。
+export function reconcileDurationQA(attempt) {
+  const qa = attempt?.qa;
+  if (!qa || qa.fullDecode !== 'passed') return false;
+  if (!Number.isFinite(qa.duration) || qa.duration <= 0) return false;
+  if (attempt.technicalPassed) return false;
+  const oldFatal = qa.fatal || [];
+  const onlyDuration = oldFatal.length > 0 && oldFatal.every(f => /与计划|超过 12|超过12|超过.*12 秒|12.05/.test(f));
+  if (!onlyDuration) return false;
+  qa.fatal = [];
+  qa.technical = 'passed';
+  return true;
 }
