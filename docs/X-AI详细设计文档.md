@@ -4,7 +4,7 @@
 > 版本沿革：1.0 原设计；1.1 同名素材、自动关联、筛选与创作项目；1.1.1 单段互斥试听 / 试看；1.1.2 本地启动与连接恢复；1.1.3 原素材只引用与文件状态恢复；1.1.4 目录写入重试与批量映射保存；1.1.5 任务刷新与动态进度；1.1.6 紧凑进度与媒体下载恢复；1.2.0 小白版 / 专家版、PavoAI与动态平台能力；1.2.1 极简默认入口与提交冷却；1.2.2 自动排队与下载恢复；1.2.3 队列自检、后台校验与输入清空；1.2.4 下载检查点与模块版本一致性；1.2.5 操作独立间隔与渐进限流；1.2.6 Pages自动媒体通道；1.2.7 本机服务保活与密钥操作。新增与变更详见第27—41章，完整需求追踪和故障复盘见第42章。<br>
 > 文档基准日期：2026-10-03（北京时间）<br>
 > 文档补充修订：**1.2.7-R1**，汇总上述各轮需求、故障定位、修复、验证及维护注意事项；代码版本仍为1.2.7，不表示新增代码发布。<br>
-> 代码目录：`PRIVACY-REDACTED\REDACTED-DIR`<br>
+> 代码目录：`仓库根目录`<br>
 > 面向读者：产品负责人、普通使用者、前端开发者、音视频开发者、测试人员及接手开发的 AI。<br>
 > 文档性质：当前实现说明 + 设计约束 + 扩展方案。不是服务商永久规格承诺，也不是历史视频生产已全部完成的证明。
 
@@ -1018,7 +1018,7 @@ ZIP 使用 store、不重编码媒体、UTF-8、CRC32，文件名原样保留，
 开发目标：Windows、Python3.10+、桌面 Chrome / Edge。双击 `启动X-AI.cmd` 自动检查并打开页面，或运行：
 
 ```powershell
-cd PRIVACY-REDACTED\REDACTED-DIR
+cd 仓库根目录
 python tools/launch.py
 ```
 
@@ -1039,7 +1039,7 @@ GitHub账号、仓库名、本人Git提交姓名 / 邮箱、登录方式；可�
 本地仓库位于 main，当前已存在本地提交 `a0d7499 Add X-AI local video creation studio`。此前使用说明中的“尚无首次提交”属于旧状态。本文未检查远端或Pages部署结果，发布由用户自己完成。
 
 ```powershell
-cd PRIVACY-REDACTED\REDACTED-DIR
+cd 仓库根目录
 git status
 git ls-files private .local
 # 上一条应无私人文件输出
@@ -1124,7 +1124,7 @@ Object URL由页面缓存并在项目切换时撤销；下载链接延迟释放�
 ### 20.2 核心复现命令
 
 ```powershell
-cd PRIVACY-REDACTED\REDACTED-DIR
+cd 仓库根目录
 node --test tests/core.test.mjs tests/batch.test.mjs tests/references.test.mjs
 python -m unittest discover -s tests -p "test_*.py"
 
@@ -1369,7 +1369,7 @@ Playwright无法从项目常规模块解析时，按测试脚本支持的PLAYWRI
 HTML阅读版的生成工具为 `tools/build-design-doc.mjs`。只在维护文档时需要 Node 与 marked 开发工具；应用运行和已经生成的HTML不需要它们。
 
 ```powershell
-cd PRIVACY-REDACTED\REDACTED-DIR
+cd 仓库根目录
 # 本机已有marked包时，可直接指定其模块路径：
 $env:MARKED_PATH = 'C:\你的开发工具路径\node_modules\marked\lib\marked.esm.js'
 node tools/build-design-doc.mjs
@@ -2526,7 +2526,7 @@ Windows历史进程退出的直接触发者没有完整日志；文档只记录�
 
 此流程供开发者、运维或接手AI执行，普通使用者不需要逐步选技术方案。先保留证据，再用原检查点恢复，不能为了测试修改真实任务状态或再发收费请求。
 
-1. **确认真实环境。** 记录页面origin、实际runtime-version、镜号 / jobUid、state、attempt数、video_id、acceptedAt / sentAt、最新响应及downloadDiagnostic。截图只是显示状态，不能替代原project记录。读取生产记录前先定位真实输出目录；本轮为`PRIVACY-REDACTED\REDACTED\大话西游\X-AI-test`。
+1. **确认真实环境。** 记录页面origin、实际runtime-version、镜号 / jobUid、state、attempt数、video_id、acceptedAt / sentAt、最新响应及downloadDiagnostic。截图只是显示状态，不能替代原project记录。读取生产记录前先定位真实输出目录；本轮为`生产输出目录`。
 2. **先分阶段。** 没发请求看自动意图 / 暂停 / 密钥 / 前序 / 提交预算；已发但没ID按未知POST保护；有ID查询原任务；completed看URL及取片通道；有原片看回执 / 保存 / 技术检查；ready只看内容审核是否待处理。
 3. **检查有效本地结果。** 稳定读取原片及回执，核对身份、路径、大小、SHA和丢弃标记。有效原片可直接恢复，不必再等网络罚时；不能靠手工设ready跳过完整解码。
 4. **检查本机通道。** 实查配置的原端口监听及`/__xai_health`应用 / 工作区 / 版本 / lifetime，检查`.local/startup.json`、`supervisor.json`与对应日志；配置和旧PID不是在线证据。服务可用但握手被拒再看精确Origin、Host及浏览器本地网络权限。

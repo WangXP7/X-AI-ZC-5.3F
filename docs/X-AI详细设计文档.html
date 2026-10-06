@@ -270,7 +270,7 @@ a{color:#5d47a8;text-underline-offset:3px}a:hover{color:#38257a}.reader-nav{posi
 版本沿革：1.0 原设计；1.1 同名素材、自动关联、筛选与创作项目；1.1.1 单段互斥试听 / 试看；1.1.2 本地启动与连接恢复；1.1.3 原素材只引用与文件状态恢复；1.1.4 目录写入重试与批量映射保存；1.1.5 任务刷新与动态进度；1.1.6 紧凑进度与媒体下载恢复；1.2.0 小白版 / 专家版、PavoAI与动态平台能力；1.2.1 极简默认入口与提交冷却；1.2.2 自动排队与下载恢复；1.2.3 队列自检、后台校验与输入清空；1.2.4 下载检查点与模块版本一致性；1.2.5 操作独立间隔与渐进限流；1.2.6 Pages自动媒体通道；1.2.7 本机服务保活与密钥操作。新增与变更详见第27—41章，完整需求追踪和故障复盘见第42章。<br>
 文档基准日期：2026-10-03（北京时间）<br>
 文档补充修订：<strong>1.2.7-R1</strong>，汇总上述各轮需求、故障定位、修复、验证及维护注意事项；代码版本仍为1.2.7，不表示新增代码发布。<br>
-代码目录：<code>PRIVACY-REDACTED\REDACTED-DIR</code><br>
+代码目录：<code>仓库根目录</code><br>
 面向读者：产品负责人、普通使用者、前端开发者、音视频开发者、测试人员及接手开发的 AI。<br>
 文档性质：当前实现说明 + 设计约束 + 扩展方案。不是服务商永久规格承诺，也不是历史视频生产已全部完成的证明。</p>
 </blockquote>
@@ -2069,7 +2069,7 @@ nextAt = max(last + gapMs, notBefore)
 <h2 id="section-96">18. 运行、发布、迁移与准备信息<a class="anchor" href="#section-96" aria-label="链接到本节">#</a></h2>
 <h3 id="section-97">18.1 本机运行<a class="anchor" href="#section-97" aria-label="链接到本节">#</a></h3>
 <p>开发目标：Windows、Python3.10+、桌面 Chrome / Edge。双击 <code>启动X-AI.cmd</code> 自动检查并打开页面，或运行：</p>
-<div class="code-block"><div class="code-label">powershell</div><pre><code>cd PRIVACY-REDACTED\REDACTED-DIR
+<div class="code-block"><div class="code-label">powershell</div><pre><code>cd 仓库根目录
 python tools/launch.py</code></pre></div>
 <p>首选 <code>http://127.0.0.1:4183/</code>，实际地址以启动输出和 <code>.local/startup.json</code> 为准。启动命令结束后后台服务继续，电脑重启后需再次启动。再次点击优先复用已有X-AI，不停止占用端口的其他服务。服务只提供静态文件，不处理生成。不能直接用 file:// 打开 index.html；模块、WebCrypto、Web Locks 和文件权限需安全上下文。</p>
 <p>可选连接器：</p>
@@ -2079,7 +2079,7 @@ python tools/connector.py --origin https://YOUR_NAME.github.io</code></pre></div
 <h3 id="section-98">18.2 发布者需要准备<a class="anchor" href="#section-98" aria-label="链接到本节">#</a></h3>
 <p>GitHub账号、仓库名、本人Git提交姓名 / 邮箱、登录方式；可用Pages仓库；可选域名和DNS；用户自己的Agnes账户 / 配额。没有须写入GitHub Actions / Pages的API Secret，本平台无构建部署后端。</p>
 <p>本地仓库位于 main，当前已存在本地提交 <code>a0d7499 Add X-AI local video creation studio</code>。此前使用说明中的“尚无首次提交”属于旧状态。本文未检查远端或Pages部署结果，发布由用户自己完成。</p>
-<div class="code-block"><div class="code-label">powershell</div><pre><code>cd PRIVACY-REDACTED\REDACTED-DIR
+<div class="code-block"><div class="code-label">powershell</div><pre><code>cd 仓库根目录
 git status
 git ls-files private .local
 # 上一条应无私人文件输出
@@ -2235,7 +2235,7 @@ git push -u origin main</code></pre></div>
 </div>
 <p>上述表格保留 1.0 的历史验证。1.1 / 1.1.1 的业务复测见第 27、28 章，1.1.2启动复测见第29章及验证记录，不以旧结果冒充新结果。平台开发阶段没有额外实际收费生成；长任务经验来自此前工程，不把合成样片当模型成片。完整测试背景见 <code>docs/验证记录.md</code>。</p>
 <h3 id="section-108">20.2 核心复现命令<a class="anchor" href="#section-108" aria-label="链接到本节">#</a></h3>
-<div class="code-block"><div class="code-label">powershell</div><pre><code>cd PRIVACY-REDACTED\REDACTED-DIR
+<div class="code-block"><div class="code-label">powershell</div><pre><code>cd 仓库根目录
 node --test tests/core.test.mjs tests/batch.test.mjs tests/references.test.mjs
 python -m unittest discover -s tests -p &quot;test_*.py&quot;
 
@@ -2771,7 +2771,7 @@ node tests/browser.mjs</code></pre></div>
 <h3 id="section-131">26.4 本文维护约定<a class="anchor" href="#section-131" aria-label="链接到本节">#</a></h3>
 <p>本文为总体设计基线，专题说明为操作细节，验证记录为执行证据。三者发生冲突时先核对用户最新要求和当前源码，再修正文档。保留历史验证日期，不把以前通过改成新版本已通过。HTML阅读版从本文件生成，不单独修改正文；文档不记录真实KEY、配对码或用户私人生成素材。</p>
 <p>HTML阅读版的生成工具为 <code>tools/build-design-doc.mjs</code>。只在维护文档时需要 Node 与 marked 开发工具；应用运行和已经生成的HTML不需要它们。</p>
-<div class="code-block"><div class="code-label">powershell</div><pre><code>cd PRIVACY-REDACTED\REDACTED-DIR
+<div class="code-block"><div class="code-label">powershell</div><pre><code>cd 仓库根目录
 # 本机已有marked包时，可直接指定其模块路径：
 $env:MARKED_PATH = &#39;C:\你的开发工具路径\node_modules\marked\lib\marked.esm.js&#39;
 node tools/build-design-doc.mjs</code></pre></div>
@@ -4474,7 +4474,7 @@ node tools/build-design-doc.mjs</code></pre></div>
 <h3 id="section-248">42.8 维护者故障排查顺序与最小用户负担<a class="anchor" href="#section-248" aria-label="链接到本节">#</a></h3>
 <p>此流程供开发者、运维或接手AI执行，普通使用者不需要逐步选技术方案。先保留证据，再用原检查点恢复，不能为了测试修改真实任务状态或再发收费请求。</p>
 <ol>
-<li><strong>确认真实环境。</strong> 记录页面origin、实际runtime-version、镜号 / jobUid、state、attempt数、video_id、acceptedAt / sentAt、最新响应及downloadDiagnostic。截图只是显示状态，不能替代原project记录。读取生产记录前先定位真实输出目录；本轮为<code>PRIVACY-REDACTED\REDACTED\大话西游\X-AI-test</code>。</li>
+<li><strong>确认真实环境。</strong> 记录页面origin、实际runtime-version、镜号 / jobUid、state、attempt数、video_id、acceptedAt / sentAt、最新响应及downloadDiagnostic。截图只是显示状态，不能替代原project记录。读取生产记录前先定位真实输出目录；本轮为<code>生产输出目录</code>。</li>
 <li><strong>先分阶段。</strong> 没发请求看自动意图 / 暂停 / 密钥 / 前序 / 提交预算；已发但没ID按未知POST保护；有ID查询原任务；completed看URL及取片通道；有原片看回执 / 保存 / 技术检查；ready只看内容审核是否待处理。</li>
 <li><strong>检查有效本地结果。</strong> 稳定读取原片及回执，核对身份、路径、大小、SHA和丢弃标记。有效原片可直接恢复，不必再等网络罚时；不能靠手工设ready跳过完整解码。</li>
 <li><strong>检查本机通道。</strong> 实查配置的原端口监听及<code>/__xai_health</code>应用 / 工作区 / 版本 / lifetime，检查<code>.local/startup.json</code>、<code>supervisor.json</code>与对应日志；配置和旧PID不是在线证据。服务可用但握手被拒再看精确Origin、Host及浏览器本地网络权限。</li>
